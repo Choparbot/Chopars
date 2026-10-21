@@ -89,16 +89,33 @@ def handle_buy(call):
     if prod:
         name, price = prod
         user_info = f"@{call.from_user.username}" if call.from_user.username else f"ID: {call.from_user.id}"
+        
+        # 1. Отправляем уведомление администраторам в группу
         order_msg = (
             f"🛍 <b>Новый заказ!</b>\n\n"
             f"Товар: {name}\n"
             f"Цена: {price} руб.\n"
             f"Покупатель: {user_info} ({call.from_user.first_name})"
         )
-        bot.send_message(GROUP_ID, order_msg, parse_mode="HTML")
-        bot.answer_callback_query(call.id, "Заказ успешно оформлен! Менеджер свяжется с вами.")
+        try:
+            bot.send_message(GROUP_ID, order_msg, parse_mode="HTML")
+        except Exception as e:
+            print(f"Ошибка отправки заказа в группу: {e}")
+
+        # 2. Отправляем клиенту заметное сообщение прямо в чат (вместо маленького окошка сверху)
+        success_text = (
+            f"✅ <b>Заказ успешно оформлен!</b>\n\n"
+            f"Вы выбрали: <b>{name}</b>\n"
+            f"Сумма к оплате: <b>{price} руб.</b>\n\n"
+            f"Менеджер уже получил уведомление и скоро свяжется с вами."
+        )
+        bot.send_message(call.message.chat.id, success_text, parse_mode="HTML")
+
+        # 3. Гасим анимацию загрузки на самой кнопке
+        bot.answer_callback_query(call.id)
     else:
-        bot.answer_callback_query(call.id, "Товар не найден.")
+        bot.answer_callback_query(call.id, "❌ Товар не найден.")
+)
 
 # --- ДОБАВЛЕНИЕ ТОВАРА (АДМИН) ---
 user_states = {}
