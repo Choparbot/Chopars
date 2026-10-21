@@ -90,7 +90,7 @@ def handle_buy(call):
         name, price = prod
         user_info = f"@{call.from_user.username}" if call.from_user.username else f"ID: {call.from_user.id}"
         
-        # 1. Отправляем уведомление администраторам в группу
+        # 1. Отправляем уведомление в админ-группу
         order_msg = (
             f"🛍 <b>Новый заказ!</b>\n\n"
             f"Товар: {name}\n"
@@ -102,7 +102,7 @@ def handle_buy(call):
         except Exception as e:
             print(f"Ошибка отправки заказа в группу: {e}")
 
-        # 2. Отправляем клиенту заметное сообщение прямо в чат (вместо маленького окошка сверху)
+        # 2. Отправляем полноценное подтверждение клиенту в чат
         success_text = (
             f"✅ <b>Заказ успешно оформлен!</b>\n\n"
             f"Вы выбрали: <b>{name}</b>\n"
@@ -111,11 +111,10 @@ def handle_buy(call):
         )
         bot.send_message(call.message.chat.id, success_text, parse_mode="HTML")
 
-        # 3. Гасим анимацию загрузки на самой кнопке
+        # 3. Гасим анимацию на кнопке
         bot.answer_callback_query(call.id)
     else:
         bot.answer_callback_query(call.id, "❌ Товар не найден.")
-)
 
 # --- ДОБАВЛЕНИЕ ТОВАРА (АДМИН) ---
 user_states = {}
