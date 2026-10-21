@@ -17,7 +17,7 @@ def run_flask():
     app.run(host="0.0.0.0", port=port)
 
 # === НАСТРОЙКИ TELEGRAM БОТА ===
-TOKEN = "6162369511:AAECsl83l3mUwIEKSb9gObg1BsvVh7OkjjI"
+TOKEN = "6162369511:AAFz9fNhpSAm5f5Jq3A1YQhGH5KnVYcqqU4"
 ADMIN_ID = 6009476963
 GROUP_ID = -1004470720510
 
@@ -76,7 +76,6 @@ def send_welcome(message):
         reply_markup=markup
     )
 
-# Шаг 1: Пользователь нажимает "Каталог товаров" -> выбор региона
 @bot.message_handler(func=lambda message: message.text == "📦 Каталог товаров")
 def ask_region_catalog(message):
     markup = types.InlineKeyboardMarkup(row_width=1)
@@ -85,25 +84,29 @@ def ask_region_catalog(message):
     
     bot.send_message(message.chat.id, "📍 Выберите ваш регион для просмотра товаров:", reply_markup=markup)
 
-# Шаг 2: Показ каталога по выбранному региону
 @bot.callback_query_handler(func=lambda call: call.data.startswith('regcat_'))
 def show_catalog_by_region(call):
     selected_region = call.data.replace('regcat_', '', 1)
     
     conn = sqlite3.connect('shop.db')
     cursor = conn.cursor()
-    # Показываем товары для конкретного региона + те, что идут для "Все регионы"
     cursor.execute('SELECT id, name, price, description, region FROM products WHERE region = ? OR region = "🌐 Все регионы"', (selected_region,))
     products = cursor.fetchall()
     conn.close()
 
     bot.answer_callback_query(call.id)
     
+    # Удаляем сообщение с выбором региона, чтобы не засорять чат
+    try:
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+    except Exception:
+        pass
+
     if not products:
         bot.send_message(call.message.chat.id, f"📭 В регионе <b>{selected_region}</b> пока нет доступных товаров.", parse_mode="HTML")
         return
 
-    bot.send_message(call.message.chat.id, f"📦 Товары для региона: <b>{selected_region}</b>", parse_mode="HTML")
+    bot.send_message(call.message.chat.id, f"📦 Актуальные товары для региона: <b>{selected_region}</b>", parse_mode="HTML")
 
     for prod in products:
         p_id, name, price, desc, prod_region = prod
@@ -154,6 +157,13 @@ def handle_buy(call):
             f"Менеджер уже получил уведомление и скоро свяжется с вами."
         )
         bot.send_message(call.message.chat.id, success_text, parse_mode="HTML")
+        
+        # Удаляем сообщение с купленным товаром у покупателя
+        try:
+            bot.delete_message(call.message.chat.id, call.message.message_id)
+        except Exception as e:
+            print(f"Ошибка удаления сообщения товара: {e}")
+            
         bot.answer_callback_query(call.id)
     else:
         bot.answer_callback_query(call.id, "❌ Товар не найден.")
@@ -240,4 +250,3 @@ def add_product_steps(message):
 if __name__ == '__main__':
     threading.Thread(target=run_flask, daemon=True).start()
     bot.infinity_polling()
-    
