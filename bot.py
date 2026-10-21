@@ -71,13 +71,20 @@ def show_catalog(message):
 
     for prod in products:
         p_id, name, price, desc = prod
-        # Форматируем цену (с разделением тысяч для удобства, например: 150 000 сум)
         formatted_price = f"{int(price):,}".replace(",", " ") if price.is_integer() else f"{price:,.2f}".replace(",", " ")
         
         text = f"<b>{name}</b>\n\nЦена: {formatted_price} сум\nОписание: {desc or 'Отсутствует'}"
         markup = types.InlineKeyboardMarkup()
-        btn = types.InlineKeyboardButton("🛒 Купить", callback_data=f"buy_{p_id}")
-        markup.add(btn)
+        
+        # Кнопка покупки для всех
+        btn_buy = types.InlineKeyboardButton("🛒 Купить", callback_data=f"buy_{p_id}")
+        markup.add(btn_buy)
+        
+        # Кнопка удаления только для администратора
+        if message.from_user.id == ADMIN_ID:
+            btn_del = types.InlineKeyboardButton("🗑 Удалить товар", callback_data=f"del_{p_id}")
+            markup.add(btn_del)
+            
         bot.send_message(message.chat.id, text, parse_mode="HTML", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('buy_'))
@@ -94,7 +101,6 @@ def handle_buy(call):
         formatted_price = f"{int(price):,}".replace(",", " ") if price.is_integer() else f"{price:,.2f}".replace(",", " ")
         user_info = f"@{call.from_user.username}" if call.from_user.username else f"ID: {call.from_user.id}"
         
-        # 1. Отправляем уведомление в админ-группу
         order_msg = (
             f"🛍 <b>Новый заказ!</b>\n\n"
             f"Товар: {name}\n"
@@ -106,7 +112,6 @@ def handle_buy(call):
         except Exception as e:
             print(f"Ошибка отправки заказа в группу: {e}")
 
-        # 2. Отправляем подтверждение клиенту
         success_text = (
             f"✅ <b>Заказ успешно оформлен!</b>\n\n"
             f"Вы выбрали: <b>{name}</b>\n"
@@ -114,11 +119,31 @@ def handle_buy(call):
             f"Менеджер уже получил уведомление и скоро свяжется с вами."
         )
         bot.send_message(call.message.chat.id, success_text, parse_mode="HTML")
-
-        # 3. Гасим анимацию на кнопке
         bot.answer_callback_query(call.id)
     else:
         bot.answer_callback_query(call.id, "❌ Товар не найден.")
+
+# --- УДАЛЕНИЕ ТОВАРА (ДЛЯ АДМИНА) ---
+@bot.callback_query_handler(func=lambda call: call.data.startswith('del_'))
+def handle_delete(call):
+    if call.from_user.id != ADMIN_ID:
+        bot.answer_callback_query(call.id, "❌ У вас нет прав на это действие.")
+        return
+
+    prod_id = call.data.split('_')[1]
+    conn = sqlite3.connect('shop.db')
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM products WHERE id = ?', (prod_id,))
+    conn.commit()
+    conn.close()
+
+    bot.answer_callback_query(call.id, "🗑 Товар успешно удален!")
+    
+    # Удаляем сообщение с товаром из чата администратора
+    try:
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+    except Exception as e:
+        print(f"Ошибка удаления сообщения: {e}")
 
 # --- ДОБАВЛЕНИЕ ТОВАРА (АДМИН) ---
 user_states = {}
@@ -167,4 +192,4 @@ def add_product_steps(message):
 if __name__ == '__main__':
     threading.Thread(target=run_flask, daemon=True).start()
     bot.infinity_polling()
-        
+    
