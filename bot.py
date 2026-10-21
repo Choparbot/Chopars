@@ -17,7 +17,7 @@ def run_flask():
     app.run(host="0.0.0.0", port=port)
 
 # === НАСТРОЙКИ TELEGRAM БОТА ===
-TOKEN = "6162369511:AAGBtBJI3u3b3JvsBYZlttjV67nj-gt2aLg"
+TOKEN = "8550204424:AAEm7K6hHD5yKpP6U2DrkIMSI7e-h2vpYI4"
 ADMIN_ID = 6009476963
 GROUP_ID = -1004470720510
 
@@ -71,7 +71,10 @@ def show_catalog(message):
 
     for prod in products:
         p_id, name, price, desc = prod
-        text = f"<b>{name}</b>\n\nЦена: {price} руб.\nОписание: {desc or 'Отсутствует'}"
+        # Форматируем цену (с разделением тысяч для удобства, например: 150 000 сум)
+        formatted_price = f"{int(price):,}".replace(",", " ") if price.is_integer() else f"{price:,.2f}".replace(",", " ")
+        
+        text = f"<b>{name}</b>\n\nЦена: {formatted_price} сум\nОписание: {desc or 'Отсутствует'}"
         markup = types.InlineKeyboardMarkup()
         btn = types.InlineKeyboardButton("🛒 Купить", callback_data=f"buy_{p_id}")
         markup.add(btn)
@@ -88,13 +91,14 @@ def handle_buy(call):
 
     if prod:
         name, price = prod
+        formatted_price = f"{int(price):,}".replace(",", " ") if price.is_integer() else f"{price:,.2f}".replace(",", " ")
         user_info = f"@{call.from_user.username}" if call.from_user.username else f"ID: {call.from_user.id}"
         
         # 1. Отправляем уведомление в админ-группу
         order_msg = (
             f"🛍 <b>Новый заказ!</b>\n\n"
             f"Товар: {name}\n"
-            f"Цена: {price} руб.\n"
+            f"Цена: {formatted_price} сум\n"
             f"Покупатель: {user_info} ({call.from_user.first_name})"
         )
         try:
@@ -102,11 +106,11 @@ def handle_buy(call):
         except Exception as e:
             print(f"Ошибка отправки заказа в группу: {e}")
 
-        # 2. Отправляем полноценное подтверждение клиенту в чат
+        # 2. Отправляем подтверждение клиенту
         success_text = (
             f"✅ <b>Заказ успешно оформлен!</b>\n\n"
             f"Вы выбрали: <b>{name}</b>\n"
-            f"Сумма к оплате: <b>{price} руб.</b>\n\n"
+            f"Сумма к оплате: <b>{formatted_price} сум</b>\n\n"
             f"Менеджер уже получил уведомление и скоро свяжется с вами."
         )
         bot.send_message(call.message.chat.id, success_text, parse_mode="HTML")
@@ -134,7 +138,7 @@ def add_product_steps(message):
     if step == 'name':
         state['name'] = message.text
         state['step'] = 'price'
-        bot.send_message(message.chat.id, "Введите цену товара (цифрами):")
+        bot.send_message(message.chat.id, "Введите цену товара в сумах (цифрами, например 50000):")
 
     elif step == 'price':
         try:
@@ -161,8 +165,6 @@ def add_product_steps(message):
 
 # --- ЗАПУСК ПОТОКОВ ---
 if __name__ == '__main__':
-    # Запускаем Flask в отдельном потоке
     threading.Thread(target=run_flask, daemon=True).start()
-    # Запускаем бота
     bot.infinity_polling()
-    
+        
