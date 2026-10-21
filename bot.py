@@ -17,7 +17,7 @@ def run_flask():
     app.run(host="0.0.0.0", port=port)
 
 # === НАСТРОЙКИ TELEGRAM БОТА ===
-TOKEN = "6162369511:AAEO5kxmd-Xp1zMv_P0fdgvKxLpmAaxEYPU"
+TOKEN = "6162369511:AAGBtBJI3u3b3JvsBYZlttjV67nj-gt2aLg"
 ADMIN_ID = 6009476963
 GROUP_ID = -1004470720510
 
