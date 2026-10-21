@@ -23,6 +23,24 @@ GROUP_ID = -1004470720510
 
 bot = telebot.TeleBot(TOKEN)
 
+# Список регионов Узбекистана
+REGIONS = [
+    "🌐 Все регионы",
+    " Tashkent / Ташкент",
+    " Tashkent Region / Ташкентская обл.",
+    " Samarkand / Самаркандская обл.",
+    " Fergana / Ферганская обл.",
+    " Andijan / Андижанская обл.",
+    " Namangan / Наманганская обл.",
+    " Bukhara / Бухарская обл.",
+    " Khorezm / Хорезмская обл.",
+    " Kashkadarya / Кашкадарьинская обл.",
+    " Surkhandarya / Сурхандарьинская обл.",
+    " Jizzakh / Джизакская обл.",
+    " Syrdarya / Сырдарьинская обл.",
+    " Republic of Karakalpakstan / Каракалпакстан"
+]
+
 # --- БАЗА ДАННЫХ ---
 def init_db():
     conn = sqlite3.connect('shop.db')
@@ -32,7 +50,8 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             price REAL NOT NULL,
-            description TEXT
+            description TEXT,
+            region TEXT DEFAULT '🌐 Все регионы'
         )
     ''')
     conn.commit()
@@ -57,53 +76,69 @@ def send_welcome(message):
         reply_markup=markup
     )
 
+# Шаг 1: Пользователь нажимает "Каталог товаров" -> выбор региона
 @bot.message_handler(func=lambda message: message.text == "📦 Каталог товаров")
-def show_catalog(message):
+def ask_region_catalog(message):
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    for reg in REGIONS:
+        markup.add(types.InlineKeyboardButton(reg, callback_data=f"regcat_{reg}"))
+    
+    bot.send_message(message.chat.id, "📍 Выберите ваш регион для просмотра товаров:", reply_markup=markup)
+
+# Шаг 2: Показ каталога по выбранному региону
+@bot.callback_query_handler(func=lambda call: call.data.startswith('regcat_'))
+def show_catalog_by_region(call):
+    selected_region = call.data.replace('regcat_', '', 1)
+    
     conn = sqlite3.connect('shop.db')
     cursor = conn.cursor()
-    cursor.execute('SELECT id, name, price, description FROM products')
+    # Показываем товары для конкретного региона + те, что идут для "Все регионы"
+    cursor.execute('SELECT id, name, price, description, region FROM products WHERE region = ? OR region = "🌐 Все регионы"', (selected_region,))
     products = cursor.fetchall()
     conn.close()
 
+    bot.answer_callback_query(call.id)
+    
     if not products:
-        bot.send_message(message.chat.id, "В каталоге пока нет товаров.")
+        bot.send_message(call.message.chat.id, f"📭 В регионе <b>{selected_region}</b> пока нет доступных товаров.", parse_mode="HTML")
         return
 
+    bot.send_message(call.message.chat.id, f"📦 Товары для региона: <b>{selected_region}</b>", parse_mode="HTML")
+
     for prod in products:
-        p_id, name, price, desc = prod
+        p_id, name, price, desc, prod_region = prod
         formatted_price = f"{int(price):,}".replace(",", " ") if price.is_integer() else f"{price:,.2f}".replace(",", " ")
         
-        text = f"<b>{name}</b>\n\nЦена: {formatted_price} сум\nОписание: {desc or 'Отсутствует'}"
+        text = f"<b>{name}</b>\n📍 Регион: {prod_region}\n\nЦена: {formatted_price} сум\nОписание: {desc or 'Отсутствует'}"
         markup = types.InlineKeyboardMarkup()
         
-        # Кнопка покупки для всех
         btn_buy = types.InlineKeyboardButton("🛒 Купить", callback_data=f"buy_{p_id}")
         markup.add(btn_buy)
         
-        # Кнопка удаления только для администратора
-        if message.from_user.id == ADMIN_ID:
+        if call.from_user.id == ADMIN_ID:
             btn_del = types.InlineKeyboardButton("🗑 Удалить товар", callback_data=f"del_{p_id}")
             markup.add(btn_del)
             
-        bot.send_message(message.chat.id, text, parse_mode="HTML", reply_markup=markup)
+        bot.send_message(call.message.chat.id, text, parse_mode="HTML", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('buy_'))
 def handle_buy(call):
     prod_id = call.data.split('_')[1]
     conn = sqlite3.connect('shop.db')
     cursor = conn.cursor()
-    cursor.execute('SELECT name, price FROM products WHERE id = ?', (prod_id,))
+    cursor.execute('SELECT name, price, region FROM products WHERE id = ?', (prod_id,))
     prod = cursor.fetchone()
     conn.close()
 
     if prod:
-        name, price = prod
+        name, price, prod_region = prod
         formatted_price = f"{int(price):,}".replace(",", " ") if price.is_integer() else f"{price:,.2f}".replace(",", " ")
         user_info = f"@{call.from_user.username}" if call.from_user.username else f"ID: {call.from_user.id}"
         
         order_msg = (
             f"🛍 <b>Новый заказ!</b>\n\n"
             f"Товар: {name}\n"
+            f"Регион: {prod_region}\n"
             f"Цена: {formatted_price} сум\n"
             f"Покупатель: {user_info} ({call.from_user.first_name})"
         )
@@ -138,22 +173,35 @@ def handle_delete(call):
     conn.close()
 
     bot.answer_callback_query(call.id, "🗑 Товар успешно удален!")
-    
-    # Удаляем сообщение с товаром из чата администратора
     try:
         bot.delete_message(call.message.chat.id, call.message.message_id)
     except Exception as e:
         print(f"Ошибка удаления сообщения: {e}")
 
-# --- ДОБАВЛЕНИЕ ТОВАРА (АДМИН) ---
+# --- ДОБАВЛЕНИЕ ТОВАРА (АДМИН С ВЫБОРОМ РЕГИОНА) ---
 user_states = {}
 
 @bot.message_handler(func=lambda message: message.text == "➕ Добавить товар")
 def add_product_start(message):
     if message.from_user.id != ADMIN_ID:
         return
-    user_states[message.chat.id] = {'step': 'name'}
-    bot.send_message(message.chat.id, "Введите название товара:")
+    
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    for reg in REGIONS:
+        markup.add(types.InlineKeyboardButton(reg, callback_data=f"addreg_{reg}"))
+        
+    bot.send_message(message.chat.id, "📍 Выберите регион, для которого предназначен товар:", reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('addreg_'))
+def add_product_region_chosen(call):
+    if call.from_user.id != ADMIN_ID:
+        return
+        
+    chosen_region = call.data.replace('addreg_', '', 1)
+    user_states[call.message.chat.id] = {'step': 'name', 'region': chosen_region}
+    
+    bot.answer_callback_query(call.id)
+    bot.send_message(call.message.chat.id, f"Выбран регион: <b>{chosen_region}</b>\n\nВведите название товара:", parse_mode="HTML")
 
 @bot.message_handler(func=lambda message: message.chat.id in user_states)
 def add_product_steps(message):
@@ -179,14 +227,14 @@ def add_product_steps(message):
         conn = sqlite3.connect('shop.db')
         cursor = conn.cursor()
         cursor.execute(
-            'INSERT INTO products (name, price, description) VALUES (?, ?, ?)',
-            (state['name'], state['price'], state['description'])
+            'INSERT INTO products (name, price, description, region) VALUES (?, ?, ?, ?)',
+            (state['name'], state['price'], state['description'], state['region'])
         )
         conn.commit()
         conn.close()
         
         del user_states[message.chat.id]
-        bot.send_message(message.chat.id, "✅ Товар успешно добавлен в каталог!")
+        bot.send_message(message.chat.id, f"✅ Товар успешно добавлен в регион: <b>{state['region']}</b>!", parse_mode="HTML")
 
 # --- ЗАПУСК ПОТОКОВ ---
 if __name__ == '__main__':
