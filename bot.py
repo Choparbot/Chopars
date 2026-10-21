@@ -17,29 +17,29 @@ def run_flask():
     app.run(host="0.0.0.0", port=port)
 
 # === НАСТРОЙКИ TELEGRAM БОТА ===
-TOKEN = "6162369511:AAFz9fNhpSAm5f5Jq3A1YQhGH5KnVYcqqU4"
+TOKEN = "8550204424:AAEm7K6hHD5yKpP6U2DrkIMSI7e-h2vpYI4"
 ADMIN_ID = 6009476963
 GROUP_ID = -1004470720510
 
 bot = telebot.TeleBot(TOKEN)
 
-# Список регионов Узбекистана
-REGIONS = [
-    "🌐 Все регионы",
-    " Tashkent / Ташкент",
-    " Tashkent Region / Ташкентская обл.",
-    " Samarkand / Самаркандская обл.",
-    " Fergana / Ферганская обл.",
-    " Andijan / Андижанская обл.",
-    " Namangan / Наманганская обл.",
-    " Bukhara / Бухарская обл.",
-    " Khorezm / Хорезмская обл.",
-    " Kashkadarya / Кашкадарьинская обл.",
-    " Surkhandarya / Сурхандарьинская обл.",
-    " Jizzakh / Джизакская обл.",
-    " Syrdarya / Сырдарьинская обл.",
-    " Republic of Karakalpakstan / Каракалпакстан"
-]
+# Безопасные короткие ключи и полные названия регионов
+REGIONS = {
+    "all": "🌐 Все регионы",
+    "tashkent_city": "Ташкент",
+    "tashkent_reg": "Ташкентская обл.",
+    "samarkand": "Самаркандская обл.",
+    "fergana": "Ферганская обл.",
+    "andijan": "Андижанская обл.",
+    "namangan": "Наманганская обл.",
+    "bukhara": "Бухарская обл.",
+    "khorezm": "Хорезмская обл.",
+    "kashkadarya": "Кашкадарьинская обл.",
+    "surkhandarya": "Сурхандарьинская обл.",
+    "jizzakh": "Джизакская обл.",
+    "syrdarya": "Сырдарьинская обл.",
+    "karakalpakstan": "Каракалпакстан"
+}
 
 # --- БАЗА ДАННЫХ ---
 def init_db():
@@ -79,14 +79,15 @@ def send_welcome(message):
 @bot.message_handler(func=lambda message: message.text == "📦 Каталог товаров")
 def ask_region_catalog(message):
     markup = types.InlineKeyboardMarkup(row_width=1)
-    for reg in REGIONS:
-        markup.add(types.InlineKeyboardButton(reg, callback_data=f"regcat_{reg}"))
+    for code, name in REGIONS.items():
+        markup.add(types.InlineKeyboardButton(name, callback_data=f"regcat_{code}"))
     
     bot.send_message(message.chat.id, "📍 Выберите ваш регион для просмотра товаров:", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('regcat_'))
 def show_catalog_by_region(call):
-    selected_region = call.data.replace('regcat_', '', 1)
+    code = call.data.replace('regcat_', '', 1)
+    selected_region = REGIONS.get(code, "🌐 Все регионы")
     
     conn = sqlite3.connect('shop.db')
     cursor = conn.cursor()
@@ -96,7 +97,6 @@ def show_catalog_by_region(call):
 
     bot.answer_callback_query(call.id)
     
-    # Удаляем сообщение с выбором региона, чтобы не засорять чат
     try:
         bot.delete_message(call.message.chat.id, call.message.message_id)
     except Exception:
@@ -158,7 +158,6 @@ def handle_buy(call):
         )
         bot.send_message(call.message.chat.id, success_text, parse_mode="HTML")
         
-        # Удаляем сообщение с купленным товаром у покупателя
         try:
             bot.delete_message(call.message.chat.id, call.message.message_id)
         except Exception as e:
@@ -197,8 +196,8 @@ def add_product_start(message):
         return
     
     markup = types.InlineKeyboardMarkup(row_width=1)
-    for reg in REGIONS:
-        markup.add(types.InlineKeyboardButton(reg, callback_data=f"addreg_{reg}"))
+    for code, name in REGIONS.items():
+        markup.add(types.InlineKeyboardButton(name, callback_data=f"addreg_{code}"))
         
     bot.send_message(message.chat.id, "📍 Выберите регион, для которого предназначен товар:", reply_markup=markup)
 
@@ -207,7 +206,9 @@ def add_product_region_chosen(call):
     if call.from_user.id != ADMIN_ID:
         return
         
-    chosen_region = call.data.replace('addreg_', '', 1)
+    code = call.data.replace('addreg_', '', 1)
+    chosen_region = REGIONS.get(code, "🌐 Все регионы")
+    
     user_states[call.message.chat.id] = {'step': 'name', 'region': chosen_region}
     
     bot.answer_callback_query(call.id)
@@ -250,3 +251,4 @@ def add_product_steps(message):
 if __name__ == '__main__':
     threading.Thread(target=run_flask, daemon=True).start()
     bot.infinity_polling()
+    
