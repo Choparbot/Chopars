@@ -17,9 +17,9 @@ def run_flask():
     app.run(host="0.0.0.0", port=port)
 
 # === НАСТРОЙКИ TELEGRAM БОТА ===
-TOKEN = "8550204424..."  # Ваш токен
-ADMIN_ID = 6009476963    # Ваш Admin ID
-GROUP_ID = -1004470720510 # Ваш Group ID
+TOKEN = "8550204424:AA..."  # Используется ваш рабочий токен
+ADMIN_ID = 6009476963
+GROUP_ID = -1004470720510
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -149,3 +149,4 @@ if __name__ == '__main__':
     threading.Thread(target=run_flask, daemon=True).start()
     # Запускаем бота
     bot.infinity_polling()
+    
